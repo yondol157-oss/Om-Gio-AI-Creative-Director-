@@ -88,7 +88,7 @@ const AppContent: React.FC = () => {
       case 'storyboard':
         return <StoryboardPage />;
       case 'pemilik-canvas':
-        return <PemilikCanvasPage onNavigate={setActiveTab} />;
+        return isAdmin ? <PemilikCanvasPage onNavigate={setActiveTab} /> : <WorkspaceHome onSelectModule={setActiveTab} />;
       case 'projects':
         return <ProjectsPage />;
       case 'assets':

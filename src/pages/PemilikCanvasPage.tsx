@@ -42,6 +42,16 @@ export const PemilikCanvasPage: React.FC<PemilikCanvasPageProps> = ({ onNavigate
   const { user, isAdmin, isPro, setShowProUpgradeModal, activeProjectId } = useAuth();
   const { showToast } = useToast();
 
+  if (!isAdmin) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center text-white/50">
+        <ShieldAlert className="w-12 h-12 text-[#D4AF37] mb-3" />
+        <h2 className="text-lg font-bold text-white mb-1">Akses Pemilik Canvas Dibatasi</h2>
+        <p className="text-xs text-white/60">Halaman ini adalah kanvas khusus Master Director dan Pemilik.</p>
+      </div>
+    );
+  }
+
   const [activeTab, setActiveTab] = useState<'canvas' | 'owner-metrics' | 'compiled'>('canvas');
 
   // Canvas Nodes State with local persistence

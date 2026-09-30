@@ -102,7 +102,11 @@ export const StoryboardPage: React.FC = () => {
     api.getStoryboards()
       .then(res => {
         if (res.storyboards?.length > 0) {
-          setActiveStoryboard(res.storyboards[0]);
+          const stb = res.storyboards[0];
+          setActiveStoryboard(stb);
+          if (stb.reference_images && Object.values(stb.reference_images).some(Boolean)) {
+            setRefImages(prev => ({ ...prev, ...stb.reference_images }));
+          }
         }
       })
       .catch(() => {});
@@ -169,6 +173,7 @@ export const StoryboardPage: React.FC = () => {
         style: styleImg,
         aspect_ratio: aspectRatio,
         use_saved_influencer: useSavedInfluencer,
+        reference_images: refImages,
       });
 
       // Save storyboard to DB
@@ -182,11 +187,12 @@ export const StoryboardPage: React.FC = () => {
         aspect_ratio: aspectRatio,
         total_shots: res.storyboard.shots?.length || shotsCount,
         total_duration: `${duration} detik`,
+        reference_images: refImages,
         shots: res.storyboard.shots || [],
       });
 
       setActiveStoryboard(savedStb.storyboard);
-      showToast('Storyboard AI Auto-Grid berhasil dirancang! Klik "Generate Visual" pada shot untuk membuat gambar.', 'SUCCESS');
+      showToast('Storyboard AI Auto-Grid berhasil dirancang dengan referensi global!', 'SUCCESS');
     } catch (err: any) {
       showToast(`Gagal merancang storyboard: ${err.message}`, 'ERROR');
     } finally {
@@ -200,7 +206,19 @@ export const StoryboardPage: React.FC = () => {
     setGeneratingShotNumbers(prev => [...prev, shot.shot_number]);
     try {
       const promptToUse = shot.prompt || `${shot.action}, ${shot.camera_angle}, ${activeStoryboard.style}, cinematic 8k photorealistic`;
-      const res = await api.generateImage(promptToUse, activeStoryboard.aspect_ratio || '16:9', activeStoryboard.style);
+      const activeRefs = Object.values(refImages).some(v => Boolean(v))
+        ? refImages
+        : (activeStoryboard.reference_images || {});
+
+      const res = await api.generateStoryboardShotImage({
+        storyboard_id: activeStoryboard.id,
+        shot_number: shot.shot_number,
+        prompt: promptToUse,
+        aspect_ratio: activeStoryboard.aspect_ratio || '16:9',
+        style: activeStoryboard.style,
+        reference_images: activeRefs,
+        shot_data: shot,
+      });
 
       const updatedShots = activeStoryboard.shots.map(s =>
         s.shot_number === shot.shot_number ? { ...s, image_url: res.imageUrl } : s
@@ -228,14 +246,27 @@ export const StoryboardPage: React.FC = () => {
     let currentShots = [...activeStoryboard.shots];
     let successCount = 0;
 
+    const activeRefs = Object.values(refImages).some(v => Boolean(v))
+      ? refImages
+      : (activeStoryboard.reference_images || {});
+
     for (let i = 0; i < currentShots.length; i++) {
       const shot = currentShots[i];
-      setGeneratingProgress(`Menghasilkan gambar Shot #${shot.shot_number} (${i + 1}/${currentShots.length})...`);
+      setGeneratingProgress(`Menghasilkan visual Shot #${shot.shot_number} (${i + 1}/${currentShots.length}) dengan Referensi...`);
       setGeneratingShotNumbers(prev => [...prev, shot.shot_number]);
 
       try {
         const promptToUse = shot.prompt || `${shot.action}, ${shot.camera_angle}, ${activeStoryboard.style}, cinematic 8k photorealistic`;
-        const res = await api.generateImage(promptToUse, activeStoryboard.aspect_ratio || '16:9', activeStoryboard.style);
+        const res = await api.generateStoryboardShotImage({
+          storyboard_id: activeStoryboard.id,
+          shot_number: shot.shot_number,
+          prompt: promptToUse,
+          aspect_ratio: activeStoryboard.aspect_ratio || '16:9',
+          style: activeStoryboard.style,
+          reference_images: activeRefs,
+          shot_data: shot,
+        });
+
         currentShots = currentShots.map(s =>
           s.shot_number === shot.shot_number ? { ...s, image_url: res.imageUrl } : s
         );

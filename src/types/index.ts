@@ -158,6 +158,7 @@ export interface Storyboard {
   aspect_ratio: string;
   total_shots: number;
   total_duration: string;
+  reference_images?: Record<string, string>;
   shots: StoryboardShot[];
   created_at: string;
   updated_at: string;

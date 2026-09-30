@@ -1,5 +1,6 @@
 import crypto from 'crypto';
-import { db, Payment, User } from './db.js';
+import { db } from './db.ts';
+import type { Payment, User } from './db.ts';
 
 export interface VerifyPaymentResult {
   success: boolean;

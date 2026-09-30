@@ -262,7 +262,15 @@ class ApiClient {
     });
   }
 
-  async generateStoryboardShotImage(data: { storyboard_id?: string; shot_number: number; prompt: string; aspect_ratio?: string; style?: string }): Promise<{ success: boolean; imageUrl: string }> {
+  async generateStoryboardShotImage(data: {
+    storyboard_id?: string;
+    shot_number: number;
+    prompt: string;
+    aspect_ratio?: string;
+    style?: string;
+    reference_images?: Record<string, string>;
+    shot_data?: any;
+  }): Promise<{ success: boolean; imageUrl: string }> {
     return this.request('/api/ai/storyboard/shot-image', {
       method: 'POST',
       body: JSON.stringify(data),

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import {
   ShieldAlert,
@@ -28,7 +29,19 @@ import {
 import { User, Payment, AIProvider, AuditLog } from '../types';
 
 export const AdminPanel: React.FC = () => {
+  const { isAdmin } = useAuth();
   const { showToast } = useToast();
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center text-white/50">
+        <ShieldAlert className="w-12 h-12 text-[#D4AF37] mb-3" />
+        <h2 className="text-lg font-bold text-white mb-1">Akses Ditolak</h2>
+        <p className="text-xs text-white/60">Hanya Master Admin yang memiliki wewenang membuka panel kontrol ini.</p>
+      </div>
+    );
+  }
+
   const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'payments' | 'providers' | 'settings' | 'audit'>('overview');
 
   // Stats & metrics

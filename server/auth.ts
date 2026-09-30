@@ -1,5 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
-import { db, User } from './db.js';
+import type { Request, Response, NextFunction } from 'express';
+import { db } from './db.ts';
+import type { User } from './db.ts';
 
 export interface AuthRequest extends Request {
   user?: User;

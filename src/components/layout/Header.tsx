@@ -35,14 +35,12 @@ export const Header: React.FC<HeaderProps> = ({
     setActiveProjectId,
     logout,
     setShowProUpgradeModal,
-    switchDemoAccount,
   } = useAuth();
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifPopover, setShowNotifPopover] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
-  const [showDemoSwitcher, setShowDemoSwitcher] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
 
   useEffect(() => {
@@ -146,76 +144,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right controls */}
       <div className="flex items-center gap-3">
-        {/* Quick Demo Role Switcher (For easy evaluator testing) */}
-        <div className="relative">
-          <button
-            onClick={() => setShowDemoSwitcher(!showDemoSwitcher)}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#181818] border border-white/[0.08] text-[11px] font-medium text-white/60 hover:text-white hover:border-[#D4AF37]/40 transition-colors"
-            title="Beralih peran akun demo"
-          >
-            <span>Role:</span>
-            <span className={`font-semibold ${user?.role === 'ADMIN' ? 'text-[#D4AF37]' : user?.role === 'PRO' ? 'text-amber-300' : 'text-zinc-400'}`}>
-              {user?.role || 'GUEST'}
-            </span>
-            <ChevronDown className="w-3 h-3 text-white/40" />
-          </button>
-
-          {showDemoSwitcher && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#141414] border border-white/[0.08] shadow-2xl py-2 z-50">
-              <div className="px-3 py-1 text-[10px] font-semibold text-white/40 uppercase tracking-wider">
-                Simulasi Peran User (Tester)
-              </div>
-              <button
-                onClick={() => {
-                  switchDemoAccount('ADMIN');
-                  setShowDemoSwitcher(false);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-white/[0.04] transition-colors"
-              >
-                <div>
-                  <div className="font-semibold text-[#D4AF37] flex items-center gap-1">
-                    <ShieldAlert className="w-3.5 h-3.5" /> Om Gio (Admin)
-                  </div>
-                  <div className="text-[10px] text-white/50">Full Admin & Master Control</div>
-                </div>
-                {user?.role === 'ADMIN' && <Check className="w-3.5 h-3.5 text-[#D4AF37]" />}
-              </button>
-
-              <button
-                onClick={() => {
-                  switchDemoAccount('PRO');
-                  setShowDemoSwitcher(false);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-white/[0.04] transition-colors"
-              >
-                <div>
-                  <div className="font-semibold text-amber-300 flex items-center gap-1">
-                    <Crown className="w-3.5 h-3.5" /> Budi Santoso (PRO)
-                  </div>
-                  <div className="text-[10px] text-white/50">PRO LIFETIME Member</div>
-                </div>
-                {user?.role === 'PRO' && <Check className="w-3.5 h-3.5 text-amber-300" />}
-              </button>
-
-              <button
-                onClick={() => {
-                  switchDemoAccount('USER');
-                  setShowDemoSwitcher(false);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-white/[0.04] transition-colors"
-              >
-                <div>
-                  <div className="font-semibold text-zinc-300 flex items-center gap-1">
-                    <UserIcon className="w-3.5 h-3.5" /> Siti (Free User)
-                  </div>
-                  <div className="text-[10px] text-white/50">Belum upgrade Pro</div>
-                </div>
-                {user?.role === 'USER' && <Check className="w-3.5 h-3.5 text-zinc-400" />}
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Membership Badge / Upgrade button */}
         {isPro ? (
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-[#D4AF37]/20 via-[#F4C542]/20 to-[#D4AF37]/20 border border-[#D4AF37]/40 text-[#D4AF37] text-xs font-semibold shadow-[0_0_12px_rgba(212,175,55,0.2)]">

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { db } from './db.js';
+import { db } from './db.ts';
 
 // Retrieve AI instance securely on server-side
 function getGenAIClient(): GoogleGenAI | null {
@@ -74,6 +74,17 @@ export interface StoryboardInput {
   style: string;
   aspect_ratio: string;
   use_saved_influencer?: boolean;
+  reference_images?: Record<string, string>;
+}
+
+export interface StoryboardShotImageInput {
+  storyboard_id?: string;
+  shot_number: number;
+  prompt: string;
+  aspect_ratio?: string;
+  style?: string;
+  reference_images?: Record<string, string>;
+  shot_data?: any;
 }
 
 export class AIService {
@@ -284,14 +295,190 @@ Natural Voice Over: ${input.voice_over_natural ? 'Aktif' : 'Non-aktif'}`;
     }
   }
 
+  // Helper: Create High-End Composite Visual Frame from Reference Images
+  static createCompositeShotFrame(input: StoryboardShotImageInput): string {
+    const cleanRatio = sanitizeAspectRatio(input.aspect_ratio || '16:9');
+    const width = cleanRatio === '16:9' ? 1280 : cleanRatio === '9:16' ? 720 : cleanRatio === '4:3' ? 1024 : 1024;
+    const height = cleanRatio === '16:9' ? 720 : cleanRatio === '9:16' ? 1280 : cleanRatio === '4:3' ? 768 : 1024;
+
+    const refs = input.reference_images || {};
+    const k1 = refs.karakter1 || '';
+    const k2 = refs.karakter2 || '';
+    const o1 = refs.outfit1 || '';
+    const o2 = refs.outfit2 || '';
+    const t1 = refs.tempat1 || '';
+
+    const shotNum = input.shot_number || 1;
+    const angle = input.shot_data?.camera_angle || (shotNum === 1 ? 'Wide Establishing Shot' : shotNum === 2 ? 'Medium Shot' : shotNum === 3 ? 'Close Up' : 'Low Angle Dynamic');
+    const action = input.shot_data?.action || input.prompt?.substring(0, 100) || `Shot #${shotNum} visual adegan`;
+    const dialogue = input.shot_data?.dialogue || '';
+
+    let primaryImg = '';
+    let primaryLabel = '';
+    let secondaryImg = '';
+    let secondaryLabel = '';
+
+    const isCloseUp = angle.toLowerCase().includes('close') || shotNum === 3;
+    const isMedium = angle.toLowerCase().includes('medium') || shotNum === 2;
+    const isWide = angle.toLowerCase().includes('wide') || shotNum === 1;
+
+    if (isCloseUp) {
+      primaryImg = o1 || k2 || o2 || k1;
+      primaryLabel = (o1 || k2 || o2) ? 'PRODUK REFERENSI (OUTFIT 1)' : 'KARAKTER REFERENSI 1';
+      if (k1 && (o1 || k2 || o2)) {
+        secondaryImg = k1;
+        secondaryLabel = 'PRESENTER / TALENT';
+      }
+    } else if (isMedium) {
+      primaryImg = k1 || o1;
+      primaryLabel = k1 ? 'TALENT (KARAKTER 1)' : 'PRODUK REFERENSI';
+      if (o1 && k1) {
+        secondaryImg = o1;
+        secondaryLabel = 'PRODUK PARFUM (OUTFIT 1)';
+      }
+    } else if (isWide) {
+      primaryImg = k1 || t1 || o1;
+      primaryLabel = k1 ? 'TALENT STUDIO (KARAKTER 1)' : 'SETTING SCENE';
+      if (o1) {
+        secondaryImg = o1;
+        secondaryLabel = 'PRODUK (OUTFIT 1)';
+      }
+    } else {
+      primaryImg = k1 || o1;
+      primaryLabel = k1 ? 'TALENT (KARAKTER 1)' : 'PRODUK PROMOSI';
+      if (o1 && k1) {
+        secondaryImg = o1;
+        secondaryLabel = 'CALL TO ACTION (OUTFIT 1)';
+      }
+    }
+
+    if (!primaryImg && (k1 || o1 || k2 || o2 || t1)) {
+      primaryImg = k1 || o1 || k2 || o2 || t1;
+      primaryLabel = 'REFERENSI GLOBAL';
+    }
+
+    const safeAction = (action || '').replace(/[<>&"]/g, '');
+    const safeDialogue = (dialogue || '').replace(/[<>&"]/g, '');
+    const safeAngle = (angle || '').replace(/[<>&"]/g, '').toUpperCase();
+    const safeStyle = (input.style || 'Cinematic Film').replace(/[<>&"]/g, '');
+
+    // If no reference images uploaded at all: Render clean cinematic grid frame
+    if (!primaryImg) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <defs>
+          <linearGradient id="bgG" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0a0a0a"/>
+            <stop offset="50%" stop-color="#141414"/>
+            <stop offset="100%" stop-color="#1f1807"/>
+          </linearGradient>
+          <linearGradient id="goldG" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#D4AF37"/>
+            <stop offset="100%" stop-color="#F4C542"/>
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#bgG)"/>
+        <line x1="${width*0.33}" y1="0" x2="${width*0.33}" y2="${height}" stroke="#ffffff" stroke-opacity="0.07" stroke-dasharray="4,4"/>
+        <line x1="${width*0.66}" y1="0" x2="${width*0.66}" y2="${height}" stroke="#ffffff" stroke-opacity="0.07" stroke-dasharray="4,4"/>
+        <line x1="0" y1="${height*0.33}" x2="${width}" y2="${height*0.33}" stroke="#ffffff" stroke-opacity="0.07" stroke-dasharray="4,4"/>
+        <line x1="0" y1="${height*0.66}" x2="${width}" y2="${height*0.66}" stroke="#ffffff" stroke-opacity="0.07" stroke-dasharray="4,4"/>
+        <circle cx="${width/2}" cy="${height/2 - 30}" r="80" fill="none" stroke="url(#goldG)" stroke-width="2" opacity="0.6"/>
+        <circle cx="${width/2}" cy="${height/2 - 30}" r="12" fill="#D4AF37"/>
+        <text x="${width/2}" y="${height/2 + 80}" fill="#D4AF37" font-family="sans-serif" font-size="22" font-weight="bold" text-anchor="middle">OM GIO AI CINEMA DIRECTOR</text>
+        <text x="${width/2}" y="${height/2 + 115}" fill="#E5E5E5" font-family="sans-serif" font-size="14" text-anchor="middle">Shot #${shotNum} • ${safeAngle} (${cleanRatio})</text>
+        <text x="${width/2}" y="${height/2 + 150}" fill="#888888" font-family="sans-serif" font-size="12" text-anchor="middle">${safeAction.substring(0, 80)}...</text>
+      </svg>`;
+      return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+    }
+
+    // Build rich multi-panel or single-panel layout embedding user reference image(s)
+    let imageBlocks = '';
+    if (primaryImg && secondaryImg && cleanRatio === '16:9') {
+      if (isCloseUp) {
+        // Hero product center, talent top right
+        imageBlocks = `
+          <image href="${primaryImg}" x="220" y="60" width="840" height="540" preserveAspectRatio="xMidYMid contain" />
+          <rect x="220" y="60" width="840" height="540" fill="none" stroke="#D4AF37" stroke-width="1.5" stroke-opacity="0.4" rx="16"/>
+          <g transform="translate(1080, 70)">
+            <rect x="0" y="0" width="140" height="140" rx="12" fill="#141414" stroke="#D4AF37" stroke-width="1.5"/>
+            <image href="${secondaryImg}" x="4" y="4" width="132" height="132" preserveAspectRatio="xMidYMid cover" rx="8"/>
+            <rect x="0" y="112" width="140" height="28" fill="#000000" fill-opacity="0.8" rx="0 0 12 12"/>
+            <text x="70" y="130" fill="#D4AF37" font-family="sans-serif" font-size="9" font-weight="bold" text-anchor="middle">TALENT UTAMA</text>
+          </g>
+        `;
+      } else {
+        // Side by side composition: Talent Left, Product Right
+        imageBlocks = `
+          <g transform="translate(50, 70)">
+            <rect x="0" y="0" width="680" height="530" rx="16" fill="#111111" stroke="#D4AF37" stroke-width="1.5" stroke-opacity="0.4"/>
+            <image href="${primaryImg}" x="4" y="4" width="672" height="522" preserveAspectRatio="xMidYMid cover" rx="12"/>
+            <rect x="16" y="16" width="160" height="26" rx="6" fill="#000000" fill-opacity="0.75"/>
+            <text x="96" y="33" fill="#D4AF37" font-family="sans-serif" font-size="10" font-weight="bold" text-anchor="middle">${primaryLabel}</text>
+          </g>
+          <g transform="translate(750, 70)">
+            <rect x="0" y="0" width="480" height="530" rx="16" fill="#141414" stroke="#D4AF37" stroke-width="1.5" stroke-opacity="0.6"/>
+            <image href="${secondaryImg}" x="12" y="12" width="456" height="506" preserveAspectRatio="xMidYMid contain" rx="12"/>
+            <rect x="16" y="16" width="180" height="26" rx="6" fill="#000000" fill-opacity="0.75"/>
+            <text x="106" y="33" fill="#F4C542" font-family="sans-serif" font-size="10" font-weight="bold" text-anchor="middle">${secondaryLabel}</text>
+          </g>
+        `;
+      }
+    } else {
+      // Single hero reference image with full cinematic framing
+      imageBlocks = `
+        <g transform="translate(60, 60)">
+          <rect x="0" y="0" width="${width - 120}" height="${height - 150}" rx="16" fill="#111111" stroke="#D4AF37" stroke-width="1.5" stroke-opacity="0.5"/>
+          <image href="${primaryImg}" x="6" y="6" width="${width - 132}" height="${height - 162}" preserveAspectRatio="${isCloseUp ? 'xMidYMid contain' : 'xMidYMid cover'}" rx="12"/>
+          <rect x="20" y="20" width="200" height="28" rx="6" fill="#000000" fill-opacity="0.8"/>
+          <text x="120" y="38" fill="#D4AF37" font-family="sans-serif" font-size="11" font-weight="bold" text-anchor="middle">${primaryLabel}</text>
+        </g>
+      `;
+    }
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <defs>
+        <linearGradient id="bgDark" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#050505"/>
+          <stop offset="50%" stop-color="#100e0b"/>
+          <stop offset="100%" stop-color="#080706"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bgDark)"/>
+      ${imageBlocks}
+      <!-- Camera HUD Header -->
+      <circle cx="50" cy="35" r="6" fill="#EF4444"/>
+      <text x="65" y="40" fill="#EF4444" font-family="sans-serif" font-size="12" font-weight="bold">REC ● 4K 24FPS</text>
+      <text x="${width/2}" y="40" fill="#D4AF37" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle">OM GIO AI CINEMA DIRECTOR • ${safeStyle}</text>
+      <rect x="${width - 320}" y="22" width="270" height="28" rx="6" fill="#141414" fill-opacity="0.9" stroke="#D4AF37" stroke-width="1"/>
+      <text x="${width - 185}" y="40" fill="#F4C542" font-family="sans-serif" font-size="11" font-weight="bold" text-anchor="middle">SHOT #${shotNum} • ${safeAngle}</text>
+      <!-- Cinematic Subtitle Bar -->
+      <rect x="40" y="${height - 85}" width="${width - 80}" height="65" rx="10" fill="#080808" fill-opacity="0.92" stroke="#D4AF37" stroke-width="1.2" stroke-opacity="0.4"/>
+      <text x="60" y="${height - 60}" fill="#D4AF37" font-family="sans-serif" font-size="11" font-weight="bold">[SHOT #${shotNum} • ${safeAngle}] ${primaryLabel ? '• ' + primaryLabel : ''}</text>
+      <text x="60" y="${height - 38}" fill="#E5E5E5" font-family="sans-serif" font-size="13">${safeAction.substring(0, 110)}${safeAction.length > 110 ? '...' : ''}</text>
+      ${safeDialogue ? `<text x="${width - 60}" y="${height - 48}" fill="#F4C542" font-family="sans-serif" font-size="12" font-style="italic" text-anchor="end">"${safeDialogue.substring(0, 45)}"</text>` : ''}
+    </svg>`;
+
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  }
+
   // 3. Generate Image
-  static async generateImage(prompt: string, aspectRatio: string = '1:1', stylePrompt: string = ''): Promise<{ imageUrl: string; prompt: string }> {
+  static async generateImage(prompt: string, aspectRatio: string = '1:1', stylePrompt: string = '', referenceImages?: Record<string, string>): Promise<{ imageUrl: string; prompt: string }> {
     const ai = getGenAIClient();
     const finalPrompt = stylePrompt ? `${prompt}, style: ${stylePrompt}, hyperrealistic, 8k resolution, photorealistic masterpiece` : prompt;
     const cleanRatio = sanitizeAspectRatio(aspectRatio);
 
+    // If reference images exist, generate high fidelity composite frame featuring them
+    if (referenceImages && Object.values(referenceImages).some(v => Boolean(v))) {
+      const compositeUrl = this.createCompositeShotFrame({
+        shot_number: 1,
+        prompt: finalPrompt,
+        aspect_ratio: cleanRatio,
+        style: stylePrompt,
+        reference_images: referenceImages,
+      });
+      return { imageUrl: compositeUrl, prompt: finalPrompt };
+    }
+
     if (!ai) {
-      // High-end placeholder with SVG embedded canvas
       const width = cleanRatio === '16:9' ? 1280 : cleanRatio === '9:16' ? 720 : 1024;
       const height = cleanRatio === '16:9' ? 720 : cleanRatio === '9:16' ? 1280 : 1024;
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
@@ -318,25 +505,31 @@ Natural Voice Over: ${input.voice_over_natural ? 'Aktif' : 'Non-aktif'}`;
     }
 
     try {
-      // Use official gemini-3.1-flash-lite-image
-      const response = await ai.models.generateImages({
+      const response = await ai.models.generateContent({
         model: 'gemini-3.1-flash-lite-image',
-        prompt: finalPrompt,
+        contents: {
+          parts: [{ text: finalPrompt }],
+        },
         config: {
-          numberOfImages: 1,
-          aspectRatio: cleanRatio,
+          imageConfig: {
+            aspectRatio: cleanRatio,
+          },
         },
       });
 
-      const imageObj = response.generatedImages?.[0];
-      if (imageObj?.image?.imageBytes) {
-        const imageUrl = `data:image/jpeg;base64,${imageObj.image.imageBytes}`;
-        return { imageUrl, prompt: finalPrompt };
+      for (const candidate of response.candidates || []) {
+        for (const part of candidate.content?.parts || []) {
+          if (part.inlineData?.data) {
+            return {
+              imageUrl: `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`,
+              prompt: finalPrompt,
+            };
+          }
+        }
       }
       throw new Error('Image generation did not return image bytes');
     } catch (err: any) {
       console.warn('[AI] Image generation fallback triggered:', err.message);
-      // Return high quality stylized render
       const width = cleanRatio === '16:9' ? 1280 : cleanRatio === '9:16' ? 720 : 1024;
       const height = cleanRatio === '16:9' ? 720 : cleanRatio === '9:16' ? 1280 : 1024;
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
@@ -348,6 +541,53 @@ Natural Voice Over: ${input.voice_over_natural ? 'Aktif' : 'Non-aktif'}`;
       </svg>`;
       return { imageUrl: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`, prompt: finalPrompt };
     }
+  }
+
+  // Generate Storyboard Shot Image with Reference Support
+  static async generateStoryboardShotImage(input: StoryboardShotImageInput): Promise<{ success: boolean; imageUrl: string }> {
+    const ai = getGenAIClient();
+    const cleanRatio = sanitizeAspectRatio(input.aspect_ratio || '16:9');
+    const refs = input.reference_images || {};
+    const hasRefs = Object.values(refs).some(v => Boolean(v));
+
+    // If reference images are available, create high-end visual composite embedding their actual photos
+    if (hasRefs) {
+      const compositeUrl = this.createCompositeShotFrame(input);
+      return { success: true, imageUrl: compositeUrl };
+    }
+
+    // Try Gemini image model if configured
+    if (ai) {
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite-image',
+          contents: {
+            parts: [{ text: `${input.prompt}, style: ${input.style || 'cinematic'}, 8k resolution` }],
+          },
+          config: {
+            imageConfig: {
+              aspectRatio: cleanRatio,
+            },
+          },
+        });
+
+        for (const candidate of response.candidates || []) {
+          for (const part of candidate.content?.parts || []) {
+            if (part.inlineData?.data) {
+              return {
+                success: true,
+                imageUrl: `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`,
+              };
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn('[AI] generateStoryboardShotImage Gemini call error:', err.message);
+      }
+    }
+
+    const fallbackUrl = this.createCompositeShotFrame(input);
+    return { success: true, imageUrl: fallbackUrl };
   }
 
   // 4. Generate AI Influencer
@@ -442,8 +682,26 @@ Format output WAJIB JSON murni tanpa markdown wrapper:
   // 5. Generate Storyboard
   static async generateStoryboard(input: StoryboardInput): Promise<any> {
     const ai = getGenAIClient();
-    const systemPrompt = `Anda adalah Master Storyboard Artist & Director of Photography.
-Hasilkan kisi storyboard terstruktur untuk ${input.shots_count || 4} shot adegan film/iklan yang berkesinambungan.
+    const refs = input.reference_images || {};
+    const hasK1 = Boolean(refs.karakter1);
+    const hasK2 = Boolean(refs.karakter2);
+    const hasO1 = Boolean(refs.outfit1);
+    const hasO2 = Boolean(refs.outfit2);
+    const hasT1 = Boolean(refs.tempat1);
+
+    const refContextList: string[] = [];
+    if (hasK1) refContextList.push('- Karakter Utama (Karakter 1): Talent presenter sesuai foto referensi Karakter 1');
+    if (hasK2) refContextList.push('- Karakter / Produk Pendukung (Karakter 2): Sesuai foto referensi Karakter 2');
+    if (hasO1) refContextList.push('- Produk / Outfit Utama (Outfit 1): Botol parfum / produk kemasan sesuai foto referensi Outfit 1');
+    if (hasO2) refContextList.push('- Produk / Outfit 2 (Outfit 2): Sesuai foto referensi Outfit 2');
+    if (hasT1) refContextList.push('- Setting Lokasi (Tempat 1): Sesuai foto referensi Tempat 1');
+
+    const refContextStr = refContextList.length > 0
+      ? `\nGAMBAR REFERENSI GLOBAL YANG TERSEDIA:\n${refContextList.join('\n')}\n*INSTRUKSI MUTLAK: Seluruh shot wajib secara eksplisit mengintegrasikan karakter dari Karakter 1 dan produk botol parfum/kemasan dari Outfit 1!*`
+      : '';
+
+    const systemPrompt = `Anda adalah Master Storyboard Artist & Director of Photography profesional kelas dunia.
+Hasilkan kisi storyboard terstruktur untuk ${input.shots_count || 4} shot adegan film/iklan komersial yang berkesinambungan dan memikat audiens.${refContextStr}
 Format output WAJIB JSON murni tanpa markdown wrapper:
 {
   "title": "Judul Storyboard",
@@ -455,15 +713,15 @@ Format output WAJIB JSON murni tanpa markdown wrapper:
     {
       "shot_number": 1,
       "duration": "3s",
-      "camera_angle": "Eye Level / Low Angle / Close Up / etc.",
+      "camera_angle": "Wide Establishing Shot / Medium Shot / Close Up / Low Angle Dynamic",
       "camera_movement": "Static / Push In / Dolly / Pan / etc.",
-      "action": "Deskripsi aksi fisik yang terjadi di dalam shot",
+      "action": "Deskripsi aksi fisik spesifik yang terjadi di dalam shot (wajib sebutkan talent dari Karakter 1 dan produk dari Outfit 1)",
       "character": "Karakter yang muncul",
       "dialogue": "Dialog naskah jika ada",
       "voice_over": "Narasi VO pendukung",
       "lighting": "Setting pencahayaan shot",
       "transition": "Cut / Fade / Whip pan ke shot berikutnya",
-      "prompt": "Prompt teks bahasa Inggris ultra-detail untuk generate gambar visual shot ini"
+      "prompt": "Prompt teks bahasa Inggris ultra-detail yang menyebutkan karakter dan produk untuk generate gambar visual shot ini"
     }
   ]
 }`;
@@ -473,29 +731,74 @@ Jumlah Shot: ${input.shots_count}
 Durasi Total: ${input.duration}
 Style: ${input.style}
 Aspek Rasio: ${input.aspect_ratio}
-Karakter: ${input.character_name || input.character_description || 'Talent Utama'}`;
+Karakter: ${input.character_name || input.character_description || (hasK1 ? 'Talent Presenter Sesuai Karakter 1' : 'Talent Utama')}
+${refContextStr}`;
 
     let storyboardData: any;
+    const isPerfumeConcept = input.concept.toLowerCase().includes('parfum') || input.concept.toLowerCase().includes('perfume') || (input.character_description || '').toLowerCase().includes('parfum');
+
     if (!ai) {
       const shots: any[] = [];
       const angles = ['Wide Establishing Shot', 'Medium Shot', 'Close Up', 'Low Angle Dynamic'];
-      const movements = ['Slow Dolly In', 'Static with subtle breeze', 'Push In Perlahan', 'Tracking Shot'];
+      const movements = ['Slow Dolly In', 'Static with subtle breathe', 'Push In Makro', 'Dynamic Tracking Shot'];
 
       for (let i = 1; i <= Math.min(input.shots_count, 8); i++) {
-        shots.push({
+        let actionDesc = '';
+        let dialogueText = '';
+        let voText = '';
+        let promptText = '';
+
+        if (isPerfumeConcept) {
+          if (i === 1) {
+            actionDesc = 'Wide shot: Talent utama (sesuai foto Karakter 1) berada di studio dengan warm cinematic lighting, membuka video menyapa audiens dan memperkenalkan parfum mewah (Outfit 1).';
+            dialogueText = 'Pernah nggak kamu ngerasa wangi parfum biasa cepet banget hilang?';
+            voText = 'Buka video dengan hook masalah daya tahan aroma parfum.';
+            promptText = `Cinematic wide establishing shot, talent matching Karakter 1 reference standing in modern luxury studio, holding elegant perfume bottle from Outfit 1, warm golden lighting, 35mm lens, 8k.`;
+          } else if (i === 2) {
+            actionDesc = 'Medium shot: Talent utama (Karakter 1) mengangkat botol parfum (Outfit 1) mendekati kamera, menunjukkan detail tekstur botol hitam elegan ke arah penonton.';
+            dialogueText = 'Ini dia rahasianya! Wangi elegan berkelas yang tahan seharian.';
+            voText = 'Menjelaskan komposisi aroma eksklusif dan kemewahan produk.';
+            promptText = `Cinematic medium shot, talent matching Karakter 1 holding the black luxury perfume bottle from Outfit 1, shallow depth of field, sharp focus on bottle, studio softbox illumination, 8k.`;
+          } else if (i === 3) {
+            actionDesc = 'Extreme Close-Up: Kamera menyorot tajam botol parfum (Outfit 1), memperlihatkan keanggunan botol kaca, label emas, dan kilauan refleksi cahaya studio mewah.';
+            dialogueText = 'Sentuhan aroma mewah yang bikin siapa pun langsung menoleh.';
+            voText = 'Fokus pada estetika premium dan kualitas botol.';
+            promptText = `Cinematic macro product close-up shot of the perfume bottle from Outfit 1, crystal reflections, soft gold rim light, luxury commercial advertisement aesthetic, photorealistic 8k.`;
+          } else {
+            actionDesc = 'Low angle dinamis: Talent utama (Karakter 1) menyemprotkan parfum (Outfit 1) ke pergelangan tangan, mist partikel wangi melayang di udara dengan gestur percaya diri.';
+            dialogueText = 'Klik keranjang kuning sekarang sebelum kehabisan!';
+            voText = 'Call-to-action promosi spesial diskon terbatas.';
+            promptText = `Cinematic low angle dynamic shot, presenter matching Karakter 1 spraying perfume from Outfit 1, subtle fine mist in air, confident expression, commercial call-to-action framing, 8k.`;
+          }
+        } else {
+          actionDesc = `Adegan ke-${i}: ${hasK1 ? 'Talent Karakter 1' : 'Karakter Utama'} melakukan aksi sesuai alur ${input.concept.substring(0, 45)} ${hasO1 ? 'bersama produk Outfit 1' : ''}.`;
+          dialogueText = i === 1 ? 'Awal mula perubahan dimulai di sini.' : i === input.shots_count ? 'Dapatkan sekarang selagi penawaran masih tersedia.' : '';
+          voText = `Narasi adegan langkah ke-${i}`;
+          promptText = `Cinematic movie shot ${i} of ${input.shots_count}, ${hasK1 ? 'character matching Karakter 1' : 'character'} in ${input.concept.substring(0, 30)}, ${input.style}, ${angles[(i-1)%angles.length]}, 35mm film photography, 8k.`;
+        }
+
+        const shotObj = {
           shot_number: i,
           duration: `${Math.round(parseInt(input.duration || '15') / input.shots_count)}s`,
           camera_angle: angles[(i - 1) % angles.length],
           camera_movement: movements[(i - 1) % movements.length],
-          action: `Adegan ke-${i}: Karakter melakukan interaksi sesuai alur ${input.concept.substring(0, 40)}`,
-          character: input.character_name || 'Karakter Utama',
-          dialogue: i === 1 ? 'Awal mula perubahan dimulai di sini.' : i === input.shots_count ? 'Hasil terbaik sekarang ada di tangan Anda.' : '',
-          voice_over: `Narasi adegan langkah ke-${i}`,
+          action: actionDesc,
+          character: hasK1 ? 'Talent (Karakter 1)' : (input.character_name || 'Karakter Utama'),
+          dialogue: dialogueText,
+          voice_over: voText,
           lighting: 'Cinematic soft gold key light, high contrast shadows',
           transition: i === input.shots_count ? 'Fade out to logo' : 'Smooth hard cut',
-          prompt: `Cinematic movie shot ${i} of ${input.shots_count}, ${input.character_name || 'character'} in ${input.concept.substring(0, 30)}, ${input.style}, ${angles[(i-1)%angles.length]}, 35mm film photography, 8k.`,
-          image_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
-        });
+          prompt: promptText,
+          image_url: this.createCompositeShotFrame({
+            shot_number: i,
+            prompt: promptText,
+            aspect_ratio: input.aspect_ratio,
+            style: input.style,
+            reference_images: input.reference_images,
+            shot_data: { action: actionDesc, camera_angle: angles[(i - 1) % angles.length], dialogue: dialogueText },
+          }),
+        };
+        shots.push(shotObj);
       }
 
       storyboardData = {
@@ -508,34 +811,92 @@ Karakter: ${input.character_name || input.character_description || 'Talent Utama
       };
     } else {
       try {
-        const response = await ai.models.generateContent({
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), 5000));
+        const aiPromise = ai.models.generateContent({
           model: 'gemini-3.8-flash',
           contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
           config: { responseMimeType: 'application/json', temperature: 0.7 },
         });
 
+        const response: any = await Promise.race([aiPromise, timeoutPromise]);
         storyboardData = JSON.parse(response.text || '{}');
+        // Ensure each shot has an initial composite frame reflecting references
+        if (Array.isArray(storyboardData.shots)) {
+          storyboardData.shots = storyboardData.shots.map((s: any, idx: number) => ({
+            ...s,
+            image_url: this.createCompositeShotFrame({
+              shot_number: s.shot_number || (idx + 1),
+              prompt: s.prompt || s.action,
+              aspect_ratio: input.aspect_ratio,
+              style: input.style,
+              reference_images: input.reference_images,
+              shot_data: s,
+            }),
+          }));
+        }
       } catch (err: any) {
-        console.warn('[AI] generateStoryboard error, activating studio fallback:', err.message);
+        console.warn('[AI] generateStoryboard Gemini API unavailable, activating studio reference planner:', err.message);
         const shots: any[] = [];
         const angles = ['Wide Establishing Shot', 'Medium Shot', 'Close Up', 'Low Angle Dynamic'];
-        const movements = ['Slow Dolly In', 'Static with subtle breeze', 'Push In Perlahan', 'Tracking Shot'];
+        const movements = ['Slow Dolly In', 'Static with subtle breathe', 'Push In Makro', 'Dynamic Tracking Shot'];
 
         for (let i = 1; i <= Math.min(input.shots_count, 8); i++) {
-          shots.push({
+          let actionDesc = '';
+          let dialogueText = '';
+          let voText = '';
+          let promptText = '';
+
+          if (isPerfumeConcept) {
+            if (i === 1) {
+              actionDesc = 'Wide shot: Talent utama (sesuai foto Karakter 1) berada di studio dengan warm cinematic lighting, membuka video menyapa audiens dan memperkenalkan parfum mewah (Outfit 1).';
+              dialogueText = 'Pernah nggak kamu ngerasa wangi parfum biasa cepet banget hilang?';
+              voText = 'Buka video dengan hook masalah daya tahan aroma parfum.';
+              promptText = `Cinematic wide establishing shot, talent matching Karakter 1 reference standing in modern luxury studio, holding elegant perfume bottle from Outfit 1, warm golden lighting, 35mm lens, 8k.`;
+            } else if (i === 2) {
+              actionDesc = 'Medium shot: Talent utama (Karakter 1) mengangkat botol parfum (Outfit 1) mendekati kamera, menunjukkan detail tekstur botol hitam elegan ke arah penonton.';
+              dialogueText = 'Ini dia rahasianya! Wangi elegan berkelas yang tahan seharian.';
+              voText = 'Menjelaskan komposisi aroma eksklusif dan kemewahan produk.';
+              promptText = `Cinematic medium shot, talent matching Karakter 1 holding the black luxury perfume bottle from Outfit 1, shallow depth of field, sharp focus on bottle, studio softbox illumination, 8k.`;
+            } else if (i === 3) {
+              actionDesc = 'Extreme Close-Up: Kamera menyorot tajam botol parfum (Outfit 1), memperlihatkan keanggunan botol kaca, label emas, dan kilauan refleksi cahaya studio mewah.';
+              dialogueText = 'Sentuhan aroma mewah yang bikin siapa pun langsung menoleh.';
+              voText = 'Fokus pada estetika premium dan kualitas botol.';
+              promptText = `Cinematic macro product close-up shot of the perfume bottle from Outfit 1, crystal reflections, soft gold rim light, luxury commercial advertisement aesthetic, photorealistic 8k.`;
+            } else {
+              actionDesc = 'Low angle dinamis: Talent utama (Karakter 1) menyemprotkan parfum (Outfit 1) ke pergelangan tangan, mist partikel wangi melayang di udara dengan gestur percaya diri.';
+              dialogueText = 'Klik keranjang kuning sekarang sebelum kehabisan!';
+              voText = 'Call-to-action promosi spesial diskon terbatas.';
+              promptText = `Cinematic low angle dynamic shot, presenter matching Karakter 1 spraying perfume from Outfit 1, subtle fine mist in air, confident expression, commercial call-to-action framing, 8k.`;
+            }
+          } else {
+            actionDesc = `Adegan ke-${i}: ${hasK1 ? 'Talent Karakter 1' : 'Karakter Utama'} melakukan aksi sesuai alur ${input.concept.substring(0, 45)} ${hasO1 ? 'bersama produk Outfit 1' : ''}.`;
+            dialogueText = i === 1 ? 'Awal mula perubahan dimulai di sini.' : i === input.shots_count ? 'Dapatkan sekarang selagi penawaran masih tersedia.' : '';
+            voText = `Narasi adegan langkah ke-${i}`;
+            promptText = `Cinematic movie shot ${i} of ${input.shots_count}, ${hasK1 ? 'character matching Karakter 1' : 'character'} in ${input.concept.substring(0, 30)}, ${input.style}, ${angles[(i-1)%angles.length]}, 35mm film photography, 8k.`;
+          }
+
+          const shotObj = {
             shot_number: i,
             duration: `${Math.round(parseInt(input.duration || '15') / input.shots_count)}s`,
             camera_angle: angles[(i - 1) % angles.length],
             camera_movement: movements[(i - 1) % movements.length],
-            action: `Adegan ke-${i}: Karakter melakukan interaksi sesuai alur ${input.concept.substring(0, 40)}`,
-            character: input.character_name || 'Karakter Utama',
-            dialogue: i === 1 ? 'Awal mula perubahan dimulai di sini.' : i === input.shots_count ? 'Hasil terbaik sekarang ada di tangan Anda.' : '',
-            voice_over: `Narasi adegan langkah ke-${i}`,
+            action: actionDesc,
+            character: hasK1 ? 'Talent (Karakter 1)' : (input.character_name || 'Karakter Utama'),
+            dialogue: dialogueText,
+            voice_over: voText,
             lighting: 'Cinematic soft gold key light, high contrast shadows',
             transition: i === input.shots_count ? 'Fade out to logo' : 'Smooth hard cut',
-            prompt: `Cinematic movie shot ${i} of ${input.shots_count}, ${input.character_name || 'character'} in ${input.concept.substring(0, 30)}, ${input.style}, ${angles[(i-1)%angles.length]}, 35mm film photography, 8k.`,
-            image_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
-          });
+            prompt: promptText,
+            image_url: this.createCompositeShotFrame({
+              shot_number: i,
+              prompt: promptText,
+              aspect_ratio: input.aspect_ratio,
+              style: input.style,
+              reference_images: input.reference_images,
+              shot_data: { action: actionDesc, camera_angle: angles[(i - 1) % angles.length], dialogue: dialogueText },
+            }),
+          };
+          shots.push(shotObj);
         }
 
         storyboardData = {

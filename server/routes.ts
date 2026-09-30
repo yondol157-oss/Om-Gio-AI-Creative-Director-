@@ -1,8 +1,11 @@
-import { Router, Request, Response } from 'express';
-import { db, UserRole, ProjectStatus, AssetCategory } from './db.js';
-import { requireAuth, requirePro, requireAdmin, createSessionToken, AuthRequest } from './auth.js';
-import { AIService } from './aiService.js';
-import { PaymentService } from './payment.js';
+import { Router } from 'express';
+import type { Request, Response } from 'express';
+import { db } from './db.ts';
+import type { UserRole, ProjectStatus, AssetCategory } from './db.ts';
+import { requireAuth, requirePro, requireAdmin, createSessionToken } from './auth.ts';
+import type { AuthRequest } from './auth.ts';
+import { AIService } from './aiService.ts';
+import { PaymentService } from './payment.ts';
 
 export const router = Router();
 
@@ -154,26 +157,9 @@ router.post('/auth/google', (req: Request, res: Response) => {
   });
 });
 
-// Demo switch account helper for easy testing inside the sandbox
+// Demo switch account helper - strictly disabled to enforce role security
 router.post('/auth/demo-switch', (req: Request, res: Response) => {
-  const { targetRole } = req.body; // 'ADMIN' | 'PRO' | 'USER'
-  const users = db.getUsers();
-  let user = users.find(u => u.role === targetRole);
-
-  if (!user && targetRole === 'ADMIN') {
-    user = users.find(u => u.id === 'usr_admin_master');
-  }
-
-  if (!user) {
-    user = users[0];
-  }
-
-  const token = createSessionToken(user);
-  res.json({
-    token,
-    user,
-    message: `Beralih ke akun demo: ${user.name} (${user.role})`,
-  });
+  return res.status(403).json({ error: 'FORBIDDEN', message: 'Fitur beralih peran telah dinonaktifkan demi keamanan sistem.' });
 });
 
 // Current user profile
@@ -785,7 +771,7 @@ router.post('/ai/image-gen', requirePro, async (req: AuthRequest, res: Response)
   }
 
   try {
-    const result = await AIService.generateImage(prompt, aspect_ratio || '1:1', style || '');
+    const result = await AIService.generateImage(prompt, aspect_ratio || '1:1', style || '', req.body.reference_images);
 
     db.recordGeneration({
       id: 'gen_' + Date.now(),
@@ -847,6 +833,30 @@ router.post('/ai/storyboard', requirePro, async (req: AuthRequest, res: Response
     });
 
     res.json({ success: true, storyboard: result });
+  } catch (err: any) {
+    res.status(500).json({ error: 'AI_PROVIDER_ERROR', message: err.message });
+  }
+});
+
+// Storyboard Shot Image Generator with Global Reference Support
+router.post('/ai/storyboard/shot-image', requirePro, async (req: AuthRequest, res: Response) => {
+  const userId = req.user!.id;
+
+  try {
+    const result = await AIService.generateStoryboardShotImage(req.body);
+
+    db.recordGeneration({
+      id: 'gen_' + Date.now(),
+      user_id: userId,
+      project_id: req.body.storyboard_id || null,
+      module: 'STORYBOARD',
+      prompt_input: req.body,
+      result_data: result,
+      status: 'SUCCESS',
+      model: 'gemini-3.1-flash-lite-image',
+    });
+
+    res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: 'AI_PROVIDER_ERROR', message: err.message });
   }
@@ -930,6 +940,10 @@ router.post('/payments/submit-proof', requireAuth, (req: AuthRequest, res: Respo
 });
 
 // Lynk Webhook receiver (Supports /payments/webhook, /lynk/webhook, and /api/payments/webhook)
+router.get(['/payments/webhook', '/lynk/webhook'], (req: Request, res: Response) => {
+  return res.redirect('/?lynk_paid=true');
+});
+
 router.post(['/payments/webhook', '/lynk/webhook', '/api/payments/webhook'], (req: Request, res: Response) => {
   const body = req.body || {};
   console.log('[LYNK WEBHOOK] Incoming payload:', JSON.stringify(body));

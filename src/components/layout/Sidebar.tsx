@@ -89,12 +89,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       proOnly: true,
     },
     {
-      id: 'pemilik-canvas',
-      label: 'Pemilik Canvas',
-      sublabel: 'OWNER DASHBOARD',
-      icon: ShieldAlert,
-    },
-    {
       id: 'projects',
       label: 'Projects',
       sublabel: 'WORKSPACE',
@@ -251,26 +245,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </button>
 
-        {/* Admin Panel (Strictly shown only for Admin) */}
+        {/* Master Owner Controls (Strictly shown only for Admin) */}
         {isAdmin && (
-          <button
-            onClick={() => handleNavClick('admin')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-left ${
-              activeTab === 'admin'
-                ? 'bg-gradient-to-r from-amber-500/20 to-amber-600/10 text-white border border-amber-500/40'
-                : 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4 shrink-0 text-[#D4AF37]" />
-            {!isCollapsed && (
-              <div className="flex flex-col">
-                <span className="text-xs font-semibold text-[#D4AF37] truncate">Admin Control Panel</span>
-                <span className="text-[9px] tracking-wider text-[#D4AF37]/60 uppercase font-semibold">
-                  MASTER OWNER
-                </span>
-              </div>
-            )}
-          </button>
+          <>
+            <button
+              onClick={() => handleNavClick('pemilik-canvas')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-left ${
+                activeTab === 'pemilik-canvas'
+                  ? 'bg-gradient-to-r from-amber-500/20 to-amber-600/10 text-white border border-amber-500/40'
+                  : 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4 shrink-0 text-[#D4AF37]" />
+              {!isCollapsed && (
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-[#D4AF37] truncate">Pemilik Canvas</span>
+                  <span className="text-[9px] tracking-wider text-[#D4AF37]/60 uppercase font-semibold">
+                    OWNER DASHBOARD
+                  </span>
+                </div>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleNavClick('admin')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-left ${
+                activeTab === 'admin'
+                  ? 'bg-gradient-to-r from-amber-500/20 to-amber-600/10 text-white border border-amber-500/40'
+                  : 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4 shrink-0 text-[#D4AF37]" />
+              {!isCollapsed && (
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-[#D4AF37] truncate">Admin Control Panel</span>
+                  <span className="text-[9px] tracking-wider text-[#D4AF37]/60 uppercase font-semibold">
+                    MASTER OWNER
+                  </span>
+                </div>
+              )}
+            </button>
+          </>
         )}
       </div>
 
