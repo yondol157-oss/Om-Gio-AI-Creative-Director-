@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #050505;
+    color: #E5E5E5;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+/* Custom subtle dark scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.4);
+}

@@ -1,0 +1,7 @@
+{
+  "name": "OM GIO AI CREATIVE DIRECTOR",
+  "description": "AI Creative Production Studio untuk menghasilkan konten, visual, video, prompt, influencer, storyboard, dan materi kreatif dalam satu workspace.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
